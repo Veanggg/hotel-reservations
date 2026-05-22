@@ -1,0 +1,60 @@
+Hotel Reservation System - Setup Instructions
+===============================================
+
+STEP 1: Install Localhost Server
+------------------------------
+- Download and install XAMPP (recommended)
+- Start Apache and MySQL services from XAMPP Control Panel
+
+STEP 2: Setup Database
+---------------------
+1. Open phpMyAdmin (http://localhost/phpmyadmin)
+2. Click "New" to create database
+3. Name it: hotel_reservation
+4. Click "Import" tab
+5. Select the database.sql file from this project
+6. Click "Go" to import
+
+STEP 3: Place Project Files
+--------------------------
+1. Copy all project files to:
+   C:\xampp\htdocs\hotel-reservation\
+   (or your localhost www directory)
+
+STEP 4: Access the Application
+------------------------------
+Open your web browser and go to:
+http://localhost/hotel-reservation/login.php
+
+STEP 5: Login
+-------------
+ADMIN LOGIN:
+Username: admin
+Password: 12345678
+
+USER LOGIN:
+Username: john_doe
+Password: password123
+
+STEP 6: Test All Features
+------------------------
+- Admin: Manage rooms, reservations, guests, view reports
+- User: Browse rooms, make bookings, view profile
+
+TROUBLESHOOTING:
+---------------
+- If you see "Database connection error", check MySQL service is running
+- If you see "404 Not Found", verify files are in correct htdocs folder
+- Make sure file permissions are correct
+- Check that database name matches "hotel_reservation"
+
+FILE STRUCTURE CHECK:
+-------------------
+hotel-reservation/
+  - login.php (START HERE)
+  - database.sql (IMPORT THIS FIRST)
+  - config/database.php
+  - functions/auth.php
+  - admin/ (admin dashboard)
+  - user/ (user dashboard)
+  - README.md
