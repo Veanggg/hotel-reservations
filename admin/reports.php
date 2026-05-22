@@ -136,7 +136,7 @@ $db->close();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reports - Hotel Reservation System</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="../node_modules/bootstrap-icons/font/bootstrap-icons.css">
     <style>
         .sidebar {
             min-height: 100vh;
@@ -438,11 +438,12 @@ $db->close();
                             </thead>
                             <tbody>
                                 <?php while ($service = $serviceUsageResult->fetch_assoc()): ?>
+                                <?php $avgQuantity = $service['avg_quantity'] ?? $service['avg_quantity_per_use'] ?? 0; ?>
                                 <tr>
                                     <td><strong><?php echo $service['service_name']; ?></strong></td>
                                     <td><?php echo $service['usage_count']; ?></td>
                                     <td>₱<?php echo number_format($service['total_revenue'], 2); ?></td>
-                                    <td><?php echo number_format($service['avg_quantity'], 1); ?></td>
+                                    <td><?php echo number_format($avgQuantity, 1); ?></td>
                                     <td><?php echo $service['unique_reservations']; ?></td>
                                 </tr>
                                 <?php endwhile; ?>
