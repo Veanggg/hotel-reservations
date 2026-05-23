@@ -59,11 +59,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['a
     $base_price = getRoomBasePrice($db, $room_id);
     
     // Payment handling
-    $payment_method = isset($_POST['payment_method']) ? $_POST['payment_method'] : 'cash';
+    $payment_method = isset($_POST['payment_method']) ? $_POST['payment_method'] : '';
     $is_half_payment = isset($_POST['half_payment']) && $_POST['half_payment'] == '1';
+    $onlinePaymentMethods = getOnlinePaymentMethods();
 
     if ($base_price === null) {
         $error = "Please select a valid room from the database.";
+    } elseif (!isset($onlinePaymentMethods[$payment_method])) {
+        $error = "Please select an online payment method. Cash is only accepted by admin for balance payments.";
     } elseif (!isValidReservationDateTimeRange($check_in_date, $check_in_time, $check_out_date, $check_out_time)) {
         $error = "Check-out date/time must be after check-in date/time.";
     } elseif (hasRoomDateConflict($db, $room_id, $check_in_datetime, $check_out_datetime)) {
@@ -108,8 +111,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['a
         $reservation_id = $db->getLastInsertId();
         
         // Handle payment creation
-        $paymentMethods = getPaymentMethods();
-        $payment_method_display = $paymentMethods[$payment_method] ?? ucfirst($payment_method);
+        $payment_method_display = $onlinePaymentMethods[$payment_method] ?? ucfirst($payment_method);
         
         if ($is_half_payment) {
             $payment_amount = calculateHalfPayment($total_amount);
@@ -1269,12 +1271,12 @@ $db->close();
                                                 <label class="form-label"><strong>Payment Method</strong></label>
                                                 <div class="row">
                                                     <?php 
-                                                    $paymentMethods = getPaymentMethods();
+                                                    $paymentMethods = getOnlinePaymentMethods();
                                                     foreach ($paymentMethods as $key => $method): 
                                                     ?>
                                                         <div class="col-md-6 mb-2">
                                                             <div class="form-check">
-                                                                <input class="form-check-input" type="radio" name="payment_method" id="payment_<?php echo $key; ?>" value="<?php echo $key; ?>" <?php echo $key === 'cash' ? 'checked' : ''; ?>>
+                                                                <input class="form-check-input" type="radio" name="payment_method" id="payment_<?php echo $key; ?>" value="<?php echo $key; ?>" <?php echo $key === 'gcash' ? 'checked' : ''; ?>>
                                                                 <label class="form-check-label" for="payment_<?php echo $key; ?>">
                                                                     <?php echo getPaymentMethodIcon($key); ?> <?php echo $method; ?>
                                                                 </label>

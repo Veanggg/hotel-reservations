@@ -127,6 +127,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if ($_POST['action'] == 'pay_remaining') {
             $reservation_id = (int)$_POST['reservation_id'];
             $payment_method = $_POST['payment_method'] ?? '';
+            $onlinePaymentMethods = getOnlinePaymentMethods();
 
             try {
                 // Verify reservation belongs to current user
@@ -147,6 +148,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                     if ($remaining <= 0) {
                         $error = "This reservation is already fully paid.";
+                    } else if (!isset($onlinePaymentMethods[$payment_method])) {
+                        $error = "Please select an online payment method. Cash balance payments are handled by admin.";
                     } else if (!$payment_method) {
                         $error = "Please select a payment method.";
                     } else {
@@ -154,8 +157,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $payment_id = createPayment($db, $reservation_id, $remaining, $payment_method, 'remaining');
                         
                         if ($payment_id) {
-                            $paymentMethods = getPaymentMethods();
-                            $method_display = $paymentMethods[$payment_method] ?? ucfirst($payment_method);
+                            $method_display = $onlinePaymentMethods[$payment_method] ?? ucfirst($payment_method);
                             $success = "✓ Remaining balance of ₱" . number_format($remaining, 2) . " paid via <strong>" . $method_display . "</strong>. Reservation is now fully paid!";
                         } else {
                             $error = "Failed to process payment. Please try again.";
@@ -675,13 +677,7 @@ $imageMapping = [
                         <h6 class="mb-3">Select Payment Method</h6>
                         <div class="payment-methods">
                             <div class="form-check mb-3">
-                                <input class="form-check-input" type="radio" name="payment_method" id="payment_cash" value="cash" required>
-                                <label class="form-check-label" for="payment_cash">
-                                    <i class="bi bi-wallet-fill me-2"></i>Cash
-                                </label>
-                            </div>
-                            <div class="form-check mb-3">
-                                <input class="form-check-input" type="radio" name="payment_method" id="payment_gcash" value="gcash" required>
+                                <input class="form-check-input" type="radio" name="payment_method" id="payment_gcash" value="gcash" required checked>
                                 <label class="form-check-label" for="payment_gcash">
                                     <i class="bi bi-phone me-2"></i>GCash
                                 </label>

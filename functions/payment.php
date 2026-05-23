@@ -26,6 +26,16 @@ function getPaymentMethods() {
 }
 
 /**
+ * Get payment methods available to guests in online booking flows.
+ * @return array Array of online payment method options
+ */
+function getOnlinePaymentMethods() {
+    $methods = getPaymentMethods();
+    unset($methods['cash']);
+    return $methods;
+}
+
+/**
  * Create a payment record
  * @param object $db Database connection
  * @param int $reservation_id Reservation ID
