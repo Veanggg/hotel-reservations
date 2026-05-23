@@ -7,8 +7,10 @@ requireAdmin();
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../functions/availability.php';
 require_once __DIR__ . '/../functions/reservation.php';
+require_once __DIR__ . '/../functions/payment.php';
 
 $db = new Database();
+ensurePaymentTypeColumn($db);
 syncRoomAvailability($db);
 
 function isValidDateRange($check_in_date, $check_in_time, $check_out_date, $check_out_time) {
@@ -328,6 +330,32 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 
                 $success = "Reservation extended to {$new_checkout_time_display}. {$pricing_note} Additional charge: ₱" . number_format($extension_charge, 2);
                 break;
+
+            case 'pay_remaining':
+                $reservation_id = (int)$_POST['reservation_id'];
+                $payment_method = $_POST['payment_method'] ?? '';
+                $paymentSummary = getPaymentSummary($db, $reservation_id);
+                $remaining = $paymentSummary['remaining_amount'] ?? 0;
+
+                if ($remaining <= 0) {
+                    $error = "This reservation is already fully paid.";
+                    break;
+                }
+
+                if (!$payment_method) {
+                    $error = "Please select a payment method.";
+                    break;
+                }
+
+                $payment_id = createPayment($db, $reservation_id, $remaining, $payment_method, 'remaining');
+                if ($payment_id) {
+                    $paymentMethods = getPaymentMethods();
+                    $method_display = $paymentMethods[$payment_method] ?? ucfirst(str_replace('_', ' ', $payment_method));
+                    $success = "Remaining balance of ₱" . number_format($remaining, 2) . " paid via " . $method_display . ".";
+                } else {
+                    $error = "Failed to process payment. Please try again.";
+                }
+                break;
         }
     }
 }
@@ -345,11 +373,19 @@ $checkOutTimeExpr = $hasTimeColumns ? 'r.check_out_time' : "'12:00:00'";
 // Build query
 $sql = "SELECT r.*, $checkInTimeExpr as check_in_time, $checkOutTimeExpr as check_out_time, CONCAT(g.first_name, ' ', g.last_name) as guest_name, 
         g.email as guest_email, g.phone as guest_phone,
-        room.room_number, rt.type_name 
+        room.room_number, rt.type_name,
+        COALESCE(payments_summary.paid_amount, 0) AS paid_amount,
+        GREATEST(r.total_amount - COALESCE(payments_summary.paid_amount, 0), 0) AS remaining_amount
         FROM reservations r 
         LEFT JOIN guests g ON r.guest_id = g.guest_id 
         LEFT JOIN rooms room ON r.room_id = room.room_id 
-        LEFT JOIN room_types rt ON room.type_id = rt.type_id 
+        LEFT JOIN room_types rt ON room.type_id = rt.type_id
+        LEFT JOIN (
+            SELECT reservation_id, SUM(amount) AS paid_amount
+            FROM payments
+            WHERE status = 'completed'
+            GROUP BY reservation_id
+        ) payments_summary ON payments_summary.reservation_id = r.reservation_id
         WHERE 1=1";
 
 if ($search) {
@@ -692,7 +728,14 @@ if (isset($_GET['edit'])) {
                                             <?php endif; ?>
                                         </td>
                                         <td><?php echo $nights; ?></td>
-                                        <td>₱<?php echo number_format($reservation['total_amount'], 2); ?></td>
+                                        <td>
+                                            ₱<?php echo number_format($reservation['total_amount'], 2); ?>
+                                            <?php if ((float)$reservation['remaining_amount'] > 0): ?>
+                                                <br><small class="text-warning">Balance: ₱<?php echo number_format($reservation['remaining_amount'], 2); ?></small>
+                                            <?php else: ?>
+                                                <br><small class="text-success">Fully paid</small>
+                                            <?php endif; ?>
+                                        </td>
                                         <td>
                                             <span class="status-badge status-<?php echo $reservation['status']; ?>">
                                                 <?php echo ucfirst(str_replace('_', ' ', $reservation['status'])); ?>
@@ -720,6 +763,14 @@ if (isset($_GET['edit'])) {
                                                 <button class="btn btn-sm btn-outline-warning" 
                                                         onclick="checkOut(<?php echo $reservation['reservation_id']; ?>)">
                                                     <i class="bi bi-box-arrow-right"></i>
+                                                </button>
+                                                <?php endif; ?>
+
+                                                <?php if ((float)$reservation['remaining_amount'] > 0 && in_array($reservation['status'], ['confirmed', 'checked_in'])): ?>
+                                                <button class="btn btn-sm btn-outline-success" 
+                                                        onclick="openPaymentModal(<?php echo $reservation['reservation_id']; ?>, <?php echo (float)$reservation['remaining_amount']; ?>)"
+                                                        title="Pay remaining balance">
+                                                    <i class="bi bi-credit-card"></i>
                                                 </button>
                                                 <?php endif; ?>
                                                 
@@ -909,6 +960,44 @@ if (isset($_GET['edit'])) {
                         </div>
                     </div>
                 </div>
+
+                <!-- Payment Modal -->
+                <div class="modal fade" id="paymentModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">
+                                    <i class="bi bi-credit-card me-2"></i>Pay Remaining Balance
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <form method="POST" id="paymentForm">
+                                <div class="modal-body">
+                                    <input type="hidden" name="action" value="pay_remaining">
+                                    <input type="hidden" name="reservation_id" id="payment_reservation_id">
+
+                                    <div class="alert alert-info mb-4">
+                                        <i class="bi bi-info-circle me-2"></i>
+                                        <strong>Remaining Balance:</strong> ₱<span id="remainingBalanceDisplay">0.00</span>
+                                    </div>
+
+                                    <label class="form-label">Payment Method</label>
+                                    <select class="form-select" name="payment_method" required>
+                                        <?php foreach (getPaymentMethods() as $key => $method): ?>
+                                            <option value="<?php echo $key; ?>"><?php echo $method; ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="bi bi-check-circle me-2"></i>Confirm Payment
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
             </main>
         </div>
     </div>
@@ -1025,6 +1114,16 @@ if (isset($_GET['edit'])) {
         function openExtendModal(reservationId) {
             document.getElementById('extend_reservation_id').value = reservationId;
             const modal = new bootstrap.Modal(document.getElementById('extendModal'));
+            modal.show();
+        }
+
+        function openPaymentModal(reservationId, remainingAmount) {
+            document.getElementById('payment_reservation_id').value = reservationId;
+            document.getElementById('remainingBalanceDisplay').textContent = Number(remainingAmount).toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+            const modal = new bootstrap.Modal(document.getElementById('paymentModal'));
             modal.show();
         }
         

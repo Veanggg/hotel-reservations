@@ -32,16 +32,18 @@ function getPaymentMethods() {
  * @param float $amount Payment amount
  * @param string $payment_method Payment method
  * @param string $payment_type Either 'full' or 'half'
+ * @param string $status Payment status (default: 'completed')
  * @return int Payment ID or null on failure
  */
-function createPayment($db, $reservation_id, $amount, $payment_method, $payment_type = 'full') {
+function createPayment($db, $reservation_id, $amount, $payment_method, $payment_type = 'full', $status = 'completed') {
     $reservation_id = (int)$reservation_id;
     $amount = (float)$amount;
     $payment_method = $db->escape($payment_method);
     $payment_type = $db->escape($payment_type);
+    $status = $db->escape($status);
     
     $sql = "INSERT INTO payments (reservation_id, amount, payment_method, payment_type, status) 
-            VALUES ($reservation_id, $amount, '$payment_method', '$payment_type', 'pending')";
+            VALUES ($reservation_id, $amount, '$payment_method', '$payment_type', '$status')";
     
     if ($db->query($sql)) {
         return $db->getLastInsertId();
@@ -159,11 +161,19 @@ function hasPaymentTypeColumn($db) {
  */
 function ensurePaymentTypeColumn($db) {
     if (hasPaymentTypeColumn($db)) {
+        $result = $db->query("SHOW COLUMNS FROM payments LIKE 'payment_type'");
+        $column = $result->fetch_assoc();
+
+        if ($column && strpos($column['Type'], "'remaining'") === false) {
+            $sql = "ALTER TABLE payments MODIFY payment_type ENUM('full', 'half', 'remaining') DEFAULT 'full'";
+            return $db->query($sql) ? true : false;
+        }
+
         return true;
     }
     
     // Add payment_type column if it doesn't exist
-    $sql = "ALTER TABLE payments ADD COLUMN payment_type ENUM('full', 'half') DEFAULT 'full' AFTER payment_method";
+    $sql = "ALTER TABLE payments ADD COLUMN payment_type ENUM('full', 'half', 'remaining') DEFAULT 'full' AFTER payment_method";
     return $db->query($sql) ? true : false;
 }
 

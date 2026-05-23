@@ -108,6 +108,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['a
         $reservation_id = $db->getLastInsertId();
         
         // Handle payment creation
+        $paymentMethods = getPaymentMethods();
+        $payment_method_display = $paymentMethods[$payment_method] ?? ucfirst($payment_method);
+        
         if ($is_half_payment) {
             $payment_amount = calculateHalfPayment($total_amount);
             createPayment($db, $reservation_id, $payment_amount, $payment_method, 'half');
@@ -120,9 +123,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['a
         
         if ($is_half_payment) {
             $half_amount = calculateHalfPayment($total_amount);
-            $success = "Room booked successfully! Half payment of ₱" . number_format($half_amount, 2) . " is pending. Remaining balance: ₱" . number_format($total_amount - $half_amount, 2);
+            $success = "✓ Room booked successfully! Payment method: <strong>" . $payment_method_display . "</strong><br>Half payment of ₱" . number_format($half_amount, 2) . " recorded. Remaining balance: ₱" . number_format($total_amount - $half_amount, 2);
         } else {
-            $success = "Room booked successfully! Total amount due: ₱" . number_format($total_amount, 2);
+            $success = "✓ Room booked successfully! Payment method: <strong>" . $payment_method_display . "</strong><br>Full payment of ₱" . number_format($total_amount, 2) . " recorded.";
         }
     }
 }

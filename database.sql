@@ -71,7 +71,8 @@ CREATE TABLE payments (
     payment_id INT PRIMARY KEY AUTO_INCREMENT,
     reservation_id INT NOT NULL,
     amount DECIMAL(10,2) NOT NULL,
-    payment_method ENUM('cash', 'credit_card', 'bank_transfer', 'online') NOT NULL,
+    payment_method ENUM('cash', 'credit_card', 'bank_transfer', 'online', 'paypal', 'gcash') NOT NULL,
+    payment_type ENUM('full', 'half', 'remaining') DEFAULT 'full',
     payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status ENUM('pending', 'completed', 'failed') DEFAULT 'pending',
     FOREIGN KEY (reservation_id) REFERENCES reservations(reservation_id) ON DELETE CASCADE

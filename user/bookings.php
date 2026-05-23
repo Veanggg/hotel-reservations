@@ -123,6 +123,51 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $error = "Error extending reservation: " . $e->getMessage();
             }
         }
+
+        if ($_POST['action'] == 'pay_remaining') {
+            $reservation_id = (int)$_POST['reservation_id'];
+            $payment_method = $_POST['payment_method'] ?? '';
+
+            try {
+                // Verify reservation belongs to current user
+                $checkSql = "SELECT r.*, g.email FROM reservations r 
+                            JOIN guests g ON r.guest_id = g.guest_id 
+                            WHERE r.reservation_id = ? AND g.email = (SELECT email FROM users WHERE user_id = ?)";
+                $stmt = $db->prepare($checkSql);
+                $stmt->bind_param("ii", $reservation_id, $user_id);
+                $stmt->execute();
+                $checkResult = $stmt->get_result();
+                $reservation = $checkResult->fetch_assoc();
+                $stmt->close();
+
+                if ($reservation) {
+                    // Get current payment status
+                    $paymentSummary = getPaymentSummary($db, $reservation_id);
+                    $remaining = $paymentSummary['remaining_amount'] ?? 0;
+
+                    if ($remaining <= 0) {
+                        $error = "This reservation is already fully paid.";
+                    } else if (!$payment_method) {
+                        $error = "Please select a payment method.";
+                    } else {
+                        // Create payment for remaining balance
+                        $payment_id = createPayment($db, $reservation_id, $remaining, $payment_method, 'remaining');
+                        
+                        if ($payment_id) {
+                            $paymentMethods = getPaymentMethods();
+                            $method_display = $paymentMethods[$payment_method] ?? ucfirst($payment_method);
+                            $success = "✓ Remaining balance of ₱" . number_format($remaining, 2) . " paid via <strong>" . $method_display . "</strong>. Reservation is now fully paid!";
+                        } else {
+                            $error = "Failed to process payment. Please try again.";
+                        }
+                    }
+                } else {
+                    $error = "Reservation not found or does not belong to you.";
+                }
+            } catch (Exception $e) {
+                $error = "Error processing payment: " . $e->getMessage();
+            }
+        }
     }
 }
 
@@ -550,9 +595,14 @@ $imageMapping = [
                                 <p id="detailRemainingBalance" class="fw-bold" style="color: #dc3545;"></p>
                             </div>
                         </div>
-                        <div class="alert alert-info mb-0" id="paymentStatusAlert">
+                        <div class="alert alert-info mb-3" id="paymentStatusAlert">
                             <i class="bi bi-info-circle me-2"></i>
                             <span id="paymentStatusText"></span>
+                        </div>
+                        <div id="payRemainingAction">
+                            <button type="button" class="btn btn-success w-100" id="payRemainingBtn" onclick="openPaymentModal()">
+                                <i class="bi bi-credit-card me-2"></i>Pay Remaining Balance
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -596,6 +646,71 @@ $imageMapping = [
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                         <button type="submit" class="btn btn-primary">Extend Reservation</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payment Modal -->
+    <div class="modal fade" id="paymentModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-credit-card me-2"></i>Pay Remaining Balance
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form method="POST" id="paymentForm">
+                    <div class="modal-body">
+                        <input type="hidden" name="action" value="pay_remaining">
+                        <input type="hidden" name="reservation_id" id="payment_reservation_id">
+                        
+                        <div class="alert alert-info mb-4">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <strong>Remaining Balance:</strong> ₱<span id="remainingBalanceDisplay">0.00</span>
+                        </div>
+
+                        <h6 class="mb-3">Select Payment Method</h6>
+                        <div class="payment-methods">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="radio" name="payment_method" id="payment_cash" value="cash" required>
+                                <label class="form-check-label" for="payment_cash">
+                                    <i class="bi bi-wallet-fill me-2"></i>Cash
+                                </label>
+                            </div>
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="radio" name="payment_method" id="payment_gcash" value="gcash" required>
+                                <label class="form-check-label" for="payment_gcash">
+                                    <i class="bi bi-phone me-2"></i>GCash
+                                </label>
+                            </div>
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="radio" name="payment_method" id="payment_paypal" value="paypal" required>
+                                <label class="form-check-label" for="payment_paypal">
+                                    <i class="bi bi-globe me-2"></i>PayPal
+                                </label>
+                            </div>
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="radio" name="payment_method" id="payment_cc" value="credit_card" required>
+                                <label class="form-check-label" for="payment_cc">
+                                    <i class="bi bi-credit-card me-2"></i>Credit Card
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="payment_method" id="payment_bank" value="bank_transfer" required>
+                                <label class="form-check-label" for="payment_bank">
+                                    <i class="bi bi-building me-2"></i>Bank Transfer
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-check-circle me-2"></i>Confirm Payment
+                        </button>
                     </div>
                 </form>
             </div>
@@ -690,6 +805,53 @@ $imageMapping = [
         function downloadReceipt(reservationId) {
             window.location.href = 'generate_receipt.php?id=' + reservationId + '&download=1';
         }
+
+        // Store current reservation ID for payment
+        let currentReservationId = null;
+
+        function openPaymentModal() {
+            // Get current reservation ID from the details modal
+            const resIdText = document.getElementById('detailResId').textContent;
+            const resId = resIdText.replace('#', '');
+            const card = document.querySelector(`[data-res-id="${resId}"]`);
+            
+            if (card) {
+                currentReservationId = resId;
+                const remainingAmount = parseFloat(card.dataset.remainingAmount) || 0;
+                
+                // Hide pay button if no remaining balance
+                if (remainingAmount <= 0) {
+                    return;
+                }
+                
+                // Set values in payment modal
+                document.getElementById('payment_reservation_id').value = resId;
+                document.getElementById('remainingBalanceDisplay').textContent = remainingAmount.toFixed(2);
+                
+                // Clear previous selection
+                document.querySelectorAll('input[name="payment_method"]').forEach(input => input.checked = false);
+                
+                // Close details modal and show payment modal
+                bootstrap.Modal.getInstance(document.getElementById('detailsModal')).hide();
+                const paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));
+                paymentModal.show();
+            }
+        }
+
+        // Update button visibility based on payment status
+        document.addEventListener('DOMContentLoaded', function() {
+            // Monitor details modal opening to control pay button visibility
+            document.getElementById('detailsModal').addEventListener('shown.bs.modal', function() {
+                const remainingAmount = parseFloat(document.getElementById('detailRemainingBalance').textContent.replace('₱', '')) || 0;
+                const payRemainingAction = document.getElementById('payRemainingAction');
+                
+                if (remainingAmount > 0) {
+                    payRemainingAction.style.display = 'block';
+                } else {
+                    payRemainingAction.style.display = 'none';
+                }
+            });
+        });
     </script>
 </body>
 </html>

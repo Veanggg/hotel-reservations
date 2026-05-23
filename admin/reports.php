@@ -5,8 +5,11 @@
 require_once __DIR__ . '/../functions/auth.php';
 requireAdmin();
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../functions/payment.php';
 
 $db = new Database();
+// Ensure payment table has payment_type column
+ensurePaymentTypeColumn($db);
 
 // Get date range from form
 $start_date = $_GET['start_date'] ?? date('Y-m-01');
@@ -115,6 +118,22 @@ $serviceUsageResult = $db->query($serviceUsageQuery);
 $paymentMethodsQuery = "
     SELECT 
         payment_method,
+        COALESCE(payment_type, 'full') AS payment_type,
+        COUNT(payment_id) AS transaction_count,
+        SUM(amount) AS total_amount,
+        AVG(amount) AS avg_amount,
+        ROUND(COUNT(payment_id) * 100.0 / (SELECT COUNT(*) FROM payments WHERE status = 'completed'), 2) AS percentage
+    FROM payments
+    WHERE status = 'completed'
+    GROUP BY payment_method, COALESCE(payment_type, 'full')
+    ORDER BY total_amount DESC
+";
+$paymentMethodsResult = $db->query($paymentMethodsQuery);
+
+// Query 7b: Payment Method Summary (without payment_type breakdown)
+$paymentMethodsSummaryQuery = "
+    SELECT 
+        payment_method,
         COUNT(payment_id) AS transaction_count,
         SUM(amount) AS total_amount,
         AVG(amount) AS avg_amount,
@@ -124,7 +143,7 @@ $paymentMethodsQuery = "
     GROUP BY payment_method
     ORDER BY total_amount DESC
 ";
-$paymentMethodsResult = $db->query($paymentMethodsQuery);
+$paymentMethodsSummaryResult = $db->query($paymentMethodsSummaryQuery);
 
 $db->close();
 ?>
@@ -460,6 +479,7 @@ $db->close();
                             <thead>
                                 <tr>
                                     <th>Payment Method</th>
+                                    <th>Payment Type</th>
                                     <th>Transactions</th>
                                     <th>Total Amount</th>
                                     <th>Average Amount</th>
@@ -467,24 +487,56 @@ $db->close();
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php while ($payment = $paymentMethodsResult->fetch_assoc()): ?>
+                                <?php 
+                                $hasData = false;
+                                if ($paymentMethodsResult->num_rows > 0) {
+                                    $hasData = true;
+                                    while ($payment = $paymentMethodsResult->fetch_assoc()): 
+                                ?>
                                 <tr>
-                                    <td><strong><?php echo ucfirst($payment['payment_method']); ?></strong></td>
+                                    <td>
+                                        <strong>
+                                            <?php 
+                                            $methods = [
+                                                'cash' => '💵 Cash',
+                                                'gcash' => '📱 GCash',
+                                                'paypal' => '🌐 PayPal',
+                                                'credit_card' => '💳 Credit Card',
+                                                'bank_transfer' => '🏦 Bank Transfer'
+                                            ];
+                                            echo $methods[$payment['payment_method']] ?? ucfirst(str_replace('_', ' ', $payment['payment_method']));
+                                            ?>
+                                        </strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge <?php echo $payment['payment_type'] === 'half' ? 'bg-warning' : 'bg-success'; ?>">
+                                            <?php echo $payment['payment_type'] === 'half' ? 'Half Payment' : 'Full Payment'; ?>
+                                        </span>
+                                    </td>
                                     <td><?php echo $payment['transaction_count']; ?></td>
-                                    <td>₱<?php echo number_format($payment['total_amount'], 2); ?></td>
+                                    <td><strong>₱<?php echo number_format($payment['total_amount'], 2); ?></strong></td>
                                     <td>₱<?php echo number_format($payment['avg_amount'], 2); ?></td>
                                     <td>
                                         <div class="progress" style="height: 20px;">
                                             <div class="progress-bar" role="progressbar" 
-                                                 style="width: <?php echo $payment['percentage']; ?>%">
+                                                 style="width: <?php echo $payment['percentage']; ?>%; background: linear-gradient(90deg, #667eea, #764ba2);">
                                                 <?php echo $payment['percentage']; ?>%
                                             </div>
                                         </div>
                                     </td>
                                 </tr>
-                                <?php endwhile; ?>
+                                <?php 
+                                    endwhile;
+                                }
+                                ?>
                             </tbody>
                         </table>
+                        <?php if (!$hasData): ?>
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            No payment data available yet. Payments will appear here once bookings are completed.
+                        </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </main>
