@@ -108,7 +108,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['a
 
 // Get available rooms for booking
 $roomsQuery = "
-    SELECT r.*, rt.type_name, rt.base_price, rt.max_occupancy 
+    SELECT r.*, rt.type_name, rt.base_price, rt.max_occupancy, rt.description
     FROM rooms r 
     JOIN room_types rt ON r.type_id = rt.type_id 
     WHERE r.status = 'available' 
@@ -116,7 +116,23 @@ $roomsQuery = "
 ";
 $roomsResult = $db->query($roomsQuery);
 $rooms = [];
+
+// Image mapping for room types
+$imageMapping = [
+    'Standard' => 'Single Standard.jpg',
+    'Standard Double' => 'standard double.jpg',
+    'Deluxe' => 'deluxe room.jpg',
+    'Suite' => 'suite.jpg',
+    'Family Room' => 'family room.jpg',
+    'Twin Room' => 'twin room.jpg',
+    'Budget Room' => 'budget room.jpg',
+    'Connecting Rooms' => 'connecting rooms.jpg',
+    'Penthouse' => 'penthouse.jpg'
+];
+
 while ($room = $roomsResult->fetch_assoc()) {
+    // Determine image file based on room type
+    $room['image_file'] = $imageMapping[$room['type_name']] ?? 'Single Standard.jpg';
     $rooms[] = $room;
 }
 
@@ -157,6 +173,27 @@ $roomSummaryResult = $db->query("
 ");
 $roomSummary = $roomSummaryResult->fetch_assoc();
 
+// Get all room types with statistics
+$roomTypesQuery = "
+    SELECT 
+        rt.type_id,
+        rt.type_name,
+        rt.description,
+        rt.base_price,
+        rt.max_occupancy,
+        COUNT(r.room_id) AS total_rooms,
+        SUM(CASE WHEN r.status = 'available' THEN 1 ELSE 0 END) AS available_rooms
+    FROM room_types rt
+    LEFT JOIN rooms r ON rt.type_id = r.type_id
+    GROUP BY rt.type_id, rt.type_name, rt.description, rt.base_price, rt.max_occupancy
+    ORDER BY rt.base_price ASC
+";
+$roomTypesResult = $db->query($roomTypesQuery);
+$roomTypes = [];
+while ($roomType = $roomTypesResult->fetch_assoc()) {
+    $roomTypes[] = $roomType;
+}
+
 $db->close();
 ?>
 
@@ -169,79 +206,632 @@ $db->close();
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../node_modules/bootstrap-icons/font/bootstrap-icons.css">
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
         .sidebar {
             min-height: 100vh;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            position: relative;
+            overflow: hidden;
         }
+
+        .sidebar::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: moveBackground 20s linear infinite;
+        }
+
+        @keyframes moveBackground {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50px, 50px); }
+        }
+
         .sidebar .nav-link {
             color: rgba(255, 255, 255, 0.8);
             padding: 15px 20px;
             border-radius: 10px;
             margin: 5px 0;
             transition: all 0.3s;
+            position: relative;
+            z-index: 1;
         }
+
         .sidebar .nav-link:hover, .sidebar .nav-link.active {
             background: rgba(255, 255, 255, 0.2);
             color: white;
+            transform: translateX(5px);
         }
+
+        .sidebar .text-center {
+            position: relative;
+            z-index: 1;
+        }
+
         .main-content {
-            background: #f8f9fa;
+            background: linear-gradient(135deg, #f5f7ff 0%, #f8f9fa 50%, #fff5f7 100%);
             min-height: 100vh;
+            padding-top: 20px;
+            padding-bottom: 40px;
         }
+
         .page-header {
             background: white;
             border-radius: 15px;
             padding: 25px;
             margin-bottom: 25px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(102, 126, 234, 0.1);
+            transition: all 0.3s;
         }
+
+        .page-header:hover {
+            box-shadow: 0 12px 35px rgba(102, 126, 234, 0.15);
+        }
+
         .room-card {
             background: white;
             border-radius: 15px;
             padding: 20px;
             margin-bottom: 15px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-            transition: transform 0.3s;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             height: 100%;
+            border: 1px solid rgba(102, 126, 234, 0.05);
+            position: relative;
+            overflow: hidden;
         }
+
+        .room-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.6s;
+        }
+
+        .room-card:hover::before {
+            left: 100%;
+        }
+
         .room-card:hover {
-            transform: translateY(-3px);
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.2);
+            border-color: #667eea;
         }
+
         .room-image {
             height: 200px;
             background: linear-gradient(135deg, #667eea, #764ba2);
-            border-radius: 10px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
             font-size: 3rem;
             margin-bottom: 15px;
+            position: relative;
+            overflow: hidden;
+            background-size: cover;
+            background-position: center;
         }
+
+        .room-image-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(118, 75, 162, 0.3));
+            transition: all 0.3s;
+            z-index: 1;
+        }
+
+        .room-card:hover .room-image-overlay {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+        }
+
+        .room-image::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+
         .price-tag {
-            background: #28a745;
+            background: linear-gradient(135deg, #28a745, #20c997);
             color: white;
-            padding: 5px 10px;
+            padding: 8px 16px;
             border-radius: 20px;
             font-size: 14px;
             font-weight: bold;
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+            transition: all 0.3s;
         }
+
+        .price-tag:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+        }
+
         .status-badge {
-            padding: 5px 10px;
+            padding: 8px 14px;
             border-radius: 20px;
             font-size: 12px;
             font-weight: 600;
+            transition: all 0.3s;
         }
-        .status-confirmed { background: #d1ecf1; color: #0c5460; }
-        .status-checked_in { background: #d4edda; color: #155724; }
-        .status-checked_out { background: #e2e3e5; color: #383d41; }
-        .status-cancelled { background: #f8d7da; color: #721c24; }
+
+        .status-confirmed { 
+            background: linear-gradient(135deg, #d1ecf1, #c7e9f3); 
+            color: #0c5460;
+            box-shadow: 0 2px 8px rgba(12, 84, 96, 0.15);
+        }
+
+        .status-checked_in { 
+            background: linear-gradient(135deg, #d4edda, #c3e6cb); 
+            color: #155724;
+            box-shadow: 0 2px 8px rgba(21, 87, 36, 0.15);
+        }
+
+        .status-checked_out { 
+            background: linear-gradient(135deg, #e2e3e5, #d6d8db); 
+            color: #383d41;
+            box-shadow: 0 2px 8px rgba(56, 61, 65, 0.15);
+        }
+
+        .status-cancelled { 
+            background: linear-gradient(135deg, #f8d7da, #f5c6cb); 
+            color: #721c24;
+            box-shadow: 0 2px 8px rgba(114, 28, 36, 0.15);
+        }
+
         .welcome-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #667eea 100%);
+            color: white;
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 35px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .welcome-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
+        }
+
+        .welcome-card::after {
+            content: '';
+            position: absolute;
+            bottom: -50%;
+            left: -20%;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
+        }
+
+        .welcome-card > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .welcome-card h2 {
+            font-weight: 700;
+            font-size: 28px;
+            letter-spacing: -0.5px;
+        }
+
+        .welcome-card p {
+            font-size: 16px;
+            opacity: 0.95;
+            line-height: 1.6;
+        }
+
+        .nav-tabs {
+            border-bottom: 3px solid #e9ecef !important;
+            background: white;
+            padding: 10px 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            margin-bottom: 25px;
+        }
+
+        .nav-tabs .nav-link {
+            color: #667eea;
+            border: none;
+            border-bottom: 3px solid transparent;
+            padding: 12px 24px;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-bottom: -13px;
+            border-radius: 10px 10px 0 0;
+        }
+
+        .nav-tabs .nav-link:hover {
+            color: #764ba2;
+            border-bottom-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        .nav-tabs .nav-link.active {
+            color: white;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 15px 15px 0 0;
+            border-bottom-color: transparent;
+            box-shadow: 0 -4px 15px rgba(102, 126, 234, 0.2);
+        }
+
+        .room-type-card {
+            background: white;
+            border-radius: 18px;
+            padding: 28px;
+            margin-bottom: 20px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.09);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 2px solid transparent;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .room-type-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0) 0%, rgba(118, 75, 162, 0.05) 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .room-type-card:hover::after {
+            opacity: 1;
+        }
+
+        .room-type-card:hover {
+            transform: translateY(-12px);
+            box-shadow: 0 20px 50px rgba(102, 126, 234, 0.3);
+            border-color: #667eea;
+        }
+
+        .room-type-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            transition: left 0.6s;
+            z-index: 10;
+        }
+
+        .room-type-card:hover::before {
+            left: 100%;
+        }
+
+        .room-type-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 18px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .room-type-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 28px;
+            margin-right: 18px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        .room-type-icon.standard {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+
+        .room-type-icon.deluxe {
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+        }
+
+        .room-type-icon.suite {
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+        }
+
+        .room-type-icon.penthouse {
+            background: linear-gradient(135deg, #fa709a, #fee140);
+        }
+
+        .room-type-title {
+            flex-grow: 1;
+            position: relative;
+            z-index: 2;
+        }
+
+        .room-type-title h5 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .room-type-price {
             background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: 700;
+            font-size: 15px;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            position: relative;
+            z-index: 2;
+        }
+
+        .room-type-info {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px;
+            margin-top: 18px;
+            padding-top: 18px;
+            border-top: 2px solid #f5f7ff;
+            position: relative;
+            z-index: 2;
+        }
+
+        .room-type-stat {
+            text-align: center;
+        }
+
+        .room-type-stat-value {
+            display: block;
+            font-size: 28px;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .room-type-stat-label {
+            display: block;
+            font-size: 11px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 6px;
+            font-weight: 600;
+        }
+
+        .room-type-description {
+            color: #666;
+            font-size: 14px;
+            margin-top: 12px;
+            line-height: 1.6;
+            position: relative;
+            z-index: 2;
+        }
+
+        .room-type-occupancy {
+            display: inline-block;
+            background: linear-gradient(135deg, #f5f7ff, #f8f9fa);
+            padding: 8px 14px;
+            border-radius: 18px;
+            font-size: 13px;
+            color: #667eea;
+            margin-top: 12px;
+            font-weight: 600;
+            position: relative;
+            z-index: 2;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+
+        .tab-pane {
+            animation: fadeIn 0.4s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .alert {
             border-radius: 15px;
-            padding: 30px;
-            margin-bottom: 25px;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+            animation: slideIn 0.4s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .badge {
+            padding: 6px 12px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+
+        .btn {
+            border-radius: 10px;
+            font-weight: 600;
+            transition: all 0.3s;
+            letter-spacing: 0.3px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .table-responsive {
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .table {
+            margin-bottom: 0;
+        }
+
+        .table tbody tr {
+            transition: all 0.3s;
+        }
+
+        .table tbody tr:hover {
+            background-color: rgba(102, 126, 234, 0.05);
+            transform: scale(1.01);
+        }
+
+        .room-details {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 12px;
+            padding: 12px 0;
+            border-top: 1px solid #f0f0f0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .room-detail-item {
+            display: flex;
+            align-items: center;
+            font-size: 13px;
+        }
+
+        .room-detail-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 8px;
+            font-size: 14px;
+        }
+
+        .room-detail-icon.occupancy {
+            background: rgba(102, 126, 234, 0.1);
+            color: #667eea;
+        }
+
+        .room-detail-icon.floor {
+            background: rgba(40, 167, 69, 0.1);
+            color: #28a745;
+        }
+
+        .room-detail-icon.status {
+            background: rgba(255, 193, 7, 0.1);
+            color: #ffc107;
+        }
+
+        .room-detail-text {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .room-detail-label {
+            font-size: 11px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            font-weight: 600;
+        }
+
+        .room-detail-value {
+            font-size: 13px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .room-description {
+            font-size: 13px;
+            color: #666;
+            line-height: 1.5;
+            margin-top: 10px;
+            padding: 8px 10px;
+            background: rgba(102, 126, 234, 0.05);
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+        }
+
+        .room-amenities {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .amenity-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .room-rating {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 8px;
+        }
+
+        .room-rating-stars {
+            color: #ffc107;
+            font-size: 12px;
+        }
+
+        .room-rating-text {
+            font-size: 12px;
+            color: #666;
+            font-weight: 500;
         }
     </style>
 </head>
@@ -314,109 +904,230 @@ $db->close();
                     </div>
                 <?php endif; ?>
 
-                <!-- Available Rooms Section -->
+                <!-- Room Types Section -->
                 <div class="page-header">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h3 class="mb-0">Available Rooms</h3>
-                            <p class="text-muted mb-0">
-                                <span id="availableRoomsCount"><?php echo (int)$roomSummary['available_rooms']; ?></span>
-                                of
-                                <span id="totalRoomsCount"><?php echo (int)$roomSummary['total_rooms']; ?></span>
-                                rooms available
-                            </p>
-                        </div>
-                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#searchModal">
-                            <i class="bi bi-search me-2"></i>Search Rooms
-                        </button>
-                    </div>
+                    <h5 class="mb-0">Our Room Types</h5>
                 </div>
 
-                <div class="row mb-4" id="availableRoomsList">
-                    <?php foreach ($rooms as $room): ?>
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <div class="room-card">
-                            <div class="room-image">
-                                <i class="bi bi-door-closed"></i>
-                            </div>
-                            
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div>
-                                    <h5 class="mb-1">Room <?php echo $room['room_number']; ?></h5>
-                                    <small class="text-muted">Floor <?php echo $room['floor_number']; ?></small>
+                <div class="row mb-4" id="roomTypesContainer">
+                    <?php foreach ($roomTypes as $roomType): ?>
+                    <div class="col-md-6 col-lg-3 mb-3">
+                        <div class="room-type-card" onclick="filterByRoomType('<?php echo htmlspecialchars($roomType['type_name']); ?>')">
+                            <div class="room-type-header">
+                                <div class="room-type-icon <?php echo strtolower(str_replace(' ', '-', $roomType['type_name'])); ?>">
+                                    <i class="bi bi-door-closed"></i>
                                 </div>
-                                    <span class="price-tag">₱<?php echo number_format($room['base_price'], 2); ?>/night</span>
+                                <div class="room-type-title">
+                                    <h5><?php echo htmlspecialchars($roomType['type_name']); ?></h5>
+                                </div>
+                                <div class="room-type-price">₱<?php echo number_format($roomType['base_price'], 0); ?></div>
                             </div>
                             
-                            <button class="btn btn-primary w-100" 
-                                    onclick="bookRoom(<?php echo $room['room_id']; ?>, '<?php echo $room['room_number']; ?>', <?php echo $room['base_price']; ?>)">
-                                <i class="bi bi-calendar-plus me-2"></i>Book Now
-                            </button>
+                            <?php if (!empty($roomType['description'])): ?>
+                            <div class="room-type-description">
+                                <?php echo htmlspecialchars($roomType['description']); ?>
+                            </div>
+                            <?php endif; ?>
+                            
+                            <div class="room-type-occupancy">
+                                <i class="bi bi-people me-1"></i>Max <?php echo $roomType['max_occupancy']; ?> guests
+                            </div>
+                            
+                            <div class="room-type-info">
+                                <div class="room-type-stat">
+                                    <span class="room-type-stat-value"><?php echo $roomType['total_rooms']; ?></span>
+                                    <span class="room-type-stat-label">Total</span>
+                                </div>
+                                <div class="room-type-stat">
+                                    <span class="room-type-stat-value" style="color: #28a745;"><?php echo $roomType['available_rooms'] ?? 0; ?></span>
+                                    <span class="room-type-stat-label">Available</span>
+                                </div>
+                                <div class="room-type-stat">
+                                    <span class="room-type-stat-value" style="color: #ffc107;"><?php echo ($roomType['total_rooms'] - ($roomType['available_rooms'] ?? 0)); ?></span>
+                                    <span class="room-type-stat-label">Booked</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <?php endforeach; ?>
-
-                    <?php if (count($rooms) === 0): ?>
-                    <div class="col-12">
-                        <div class="text-center py-5 bg-white rounded shadow-sm">
-                            <i class="bi bi-calendar-x" style="font-size: 3rem; color: #ccc;"></i>
-                            <h5 class="mt-3">No Available Rooms</h5>
-                            <p class="text-muted mb-0">Please check again later.</p>
-                        </div>
-                    </div>
-                    <?php endif; ?>
                 </div>
 
-                <!-- My Reservations Section -->
+                <?php if (isset($error)): ?>
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <?php echo $error; ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                <?php endif; ?>
+
+                <!-- Tabbed Navigation -->
                 <div class="page-header">
-                    <div>
-                        <h3 class="mb-0">My Reservations</h3>
-                        <p class="text-muted mb-0">View and manage your current and past reservations</p>
-                    </div>
+                    <ul class="nav nav-tabs border-0" id="reservationTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="browse-tab" data-bs-toggle="tab" data-bs-target="#browse-pane" type="button" role="tab" aria-controls="browse-pane" aria-selected="true">
+                                <i class="bi bi-door-closed me-2"></i>Browse Rooms
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="reservations-tab" data-bs-toggle="tab" data-bs-target="#reservations-pane" type="button" role="tab" aria-controls="reservations-pane" aria-selected="false">
+                                <i class="bi bi-calendar-check me-2"></i>My Reservations
+                            </button>
+                        </li>
+                    </ul>
                 </div>
 
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body">
-                        <?php if ($reservationsResult->num_rows > 0): ?>
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr>
-                                        <th>Reservation ID</th>
-                                        <th>Room</th>
-                                        <th>Type</th>
-                                        <th>Check-in</th>
-                                        <th>Check-out</th>
-                                        <th>Total Amount</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php while ($reservation = $reservationsResult->fetch_assoc()): ?>
-                                    <tr>
-                                        <td>#<?php echo $reservation['reservation_id']; ?></td>
-                                        <td><?php echo $reservation['room_number']; ?></td>
-                                        <td><?php echo $reservation['type_name']; ?></td>
-                                        <td><?php echo date('M d, Y g:i A', strtotime($reservation['check_in_date'] . ' ' . $reservation['check_in_time'])); ?></td>
-                                        <td><?php echo date('M d, Y g:i A', strtotime($reservation['check_out_date'] . ' ' . $reservation['check_out_time'])); ?></td>
-                                        <td>₱<?php echo number_format($reservation['total_amount'], 2); ?></td>
-                                        <td>
-                                            <span class="status-badge status-<?php echo $reservation['status']; ?>">
-                                                <?php echo ucfirst(str_replace('_', ' ', $reservation['status'])); ?>
-                                            </span>
-                                        </td>
-                                    </tr>
-                                    <?php endwhile; ?>
-                                </tbody>
-                            </table>
+                <!-- Tab Content -->
+                <div class="tab-content" id="reservationTabsContent">
+                    <!-- Browse Rooms Tab -->
+                    <div class="tab-pane fade show active" id="browse-pane" role="tabpanel" aria-labelledby="browse-tab">
+                        <div class="page-header mt-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="mb-0">Available Rooms</h5>
+                                    <p class="text-muted mb-0">
+                                        <span id="availableRoomsCount"><?php echo (int)$roomSummary['available_rooms']; ?></span>
+                                        of
+                                        <span id="totalRoomsCount"><?php echo (int)$roomSummary['total_rooms']; ?></span>
+                                        rooms available
+                                    </p>
+                                </div>
+                            </div>
                         </div>
-                        <?php else: ?>
-                        <div class="text-center py-5">
-                            <i class="bi bi-calendar-x" style="font-size: 3rem; color: #ccc;"></i>
-                            <h5 class="mt-3">No Reservations Yet</h5>
-                            <p class="text-muted">You haven't made any reservations. Book your first room above!</p>
+
+                        <div class="row mb-4" id="availableRoomsList">
+                            <?php foreach ($rooms as $room): ?>
+                            <div class="col-md-6 col-lg-4 mb-3">
+                                <div class="room-card">
+                                    <div class="room-image" style="background-image: url('../images/<?php echo htmlspecialchars($room['image_file']); ?>'); background-size: cover; background-position: center;">
+                                        <div class="room-image-overlay"></div>
+                                    </div>
+                                    
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <div>
+                                            <h5 class="mb-1">Room <?php echo $room['room_number']; ?></h5>
+                                            <small class="text-muted">Room ID: #<?php echo $room['room_id']; ?></small>
+                                        </div>
+                                        <span class="price-tag">₱<?php echo number_format($room['base_price'], 2); ?>/night</span>
+                                    </div>
+                                    
+                                    <div class="mb-2">
+                                        <span class="badge bg-info text-dark"><?php echo $room['type_name']; ?></span>
+                                        <span class="badge bg-success">Available</span>
+                                    </div>
+
+                                    <!-- Room Details -->
+                                    <div class="room-details">
+                                        <div class="room-detail-item">
+                                            <div class="room-detail-icon occupancy">
+                                                <i class="bi bi-people"></i>
+                                            </div>
+                                            <div class="room-detail-text">
+                                                <span class="room-detail-label">Capacity</span>
+                                                <span class="room-detail-value">Max <?php echo $room['max_occupancy']; ?> guests</span>
+                                            </div>
+                                        </div>
+                                        <div class="room-detail-item">
+                                            <div class="room-detail-icon floor">
+                                                <i class="bi bi-building"></i>
+                                            </div>
+                                            <div class="room-detail-text">
+                                                <span class="room-detail-label">Location</span>
+                                                <span class="room-detail-value">Floor <?php echo $room['floor_number']; ?></span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <?php if (!empty($room['description'])): ?>
+                                    <div class="room-description">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        <?php echo htmlspecialchars($room['description']); ?>
+                                    </div>
+                                    <?php endif; ?>
+
+                                    <div class="room-amenities">
+                                        <span class="amenity-badge">
+                                            <i class="bi bi-wifi"></i> WiFi
+                                        </span>
+                                        <span class="amenity-badge">
+                                            <i class="bi bi-thermometer-half"></i> AC
+                                        </span>
+                                        <span class="amenity-badge">
+                                            <i class="bi bi-tv"></i> TV
+                                        </span>
+                                    </div>
+                                    
+                                    <button class="btn btn-primary w-100 mt-3" 
+                                            onclick="bookRoom(<?php echo $room['room_id']; ?>, '<?php echo $room['room_number']; ?>', <?php echo $room['base_price']; ?>)">
+                                        <i class="bi bi-calendar-plus me-2"></i>Book Now
+                                    </button>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
+
+                            <?php if (count($rooms) === 0): ?>
+                            <div class="col-12">
+                                <div class="text-center py-5 bg-white rounded shadow-sm">
+                                    <i class="bi bi-calendar-x" style="font-size: 3rem; color: #ccc;"></i>
+                                    <h5 class="mt-3">No Available Rooms</h5>
+                                    <p class="text-muted mb-0">Please check again later.</p>
+                                </div>
+                            </div>
+                            <?php endif; ?>
                         </div>
-                        <?php endif; ?>
+                    </div>
+
+                    <!-- My Reservations Tab -->
+                    <div class="tab-pane fade" id="reservations-pane" role="tabpanel" aria-labelledby="reservations-tab">
+                        <div class="page-header mt-3">
+                            <div>
+                                <h5 class="mb-0">My Reservations</h5>
+                                <p class="text-muted mb-0">View and manage your current and past reservations</p>
+                            </div>
+                        </div>
+
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <?php if ($reservationsResult->num_rows > 0): ?>
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Reservation ID</th>
+                                                <th>Room</th>
+                                                <th>Room Type</th>
+                                                <th>Check-in</th>
+                                                <th>Check-out</th>
+                                                <th>Total Amount</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php while ($reservation = $reservationsResult->fetch_assoc()): ?>
+                                            <tr>
+                                                <td><strong>#<?php echo $reservation['reservation_id']; ?></strong></td>
+                                                <td><?php echo $reservation['room_number']; ?></td>
+                                                <td><span class="badge bg-info text-dark"><?php echo $reservation['type_name']; ?></span></td>
+                                                <td><?php echo date('M d, Y g:i A', strtotime($reservation['check_in_date'] . ' ' . $reservation['check_in_time'])); ?></td>
+                                                <td><?php echo date('M d, Y g:i A', strtotime($reservation['check_out_date'] . ' ' . $reservation['check_out_time'])); ?></td>
+                                                <td><strong>₱<?php echo number_format($reservation['total_amount'], 2); ?></strong></td>
+                                                <td>
+                                                    <span class="status-badge status-<?php echo $reservation['status']; ?>">
+                                                        <?php echo ucfirst(str_replace('_', ' ', $reservation['status'])); ?>
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                            <?php endwhile; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <?php else: ?>
+                                <div class="text-center py-5">
+                                    <i class="bi bi-calendar-x" style="font-size: 3rem; color: #ccc;"></i>
+                                    <h5 class="mt-3">No Reservations Yet</h5>
+                                    <p class="text-muted">You haven't made any reservations. Book your first room in the Browse Rooms tab!</p>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -501,8 +1212,25 @@ $db->close();
         let basePrice = 0;
         let availableRooms = <?php echo json_encode($rooms); ?>;
         let bookedRanges = <?php echo json_encode($bookedRanges); ?>;
+        let selectedRoomType = null;
         const currentCheckInDate = <?php echo json_encode($currentCheckInDate); ?>;
         const currentCheckInTime = <?php echo json_encode($currentCheckInTime); ?>;
+
+        function filterByRoomType(typeName) {
+            selectedRoomType = typeName;
+            renderAvailableRooms();
+            
+            // Scroll to browse rooms tab
+            document.getElementById('browse-tab').click();
+            setTimeout(() => {
+                document.getElementById('availableRoomsList').scrollIntoView({ behavior: 'smooth' });
+            }, 100);
+        }
+
+        function clearRoomTypeFilter() {
+            selectedRoomType = null;
+            renderAvailableRooms();
+        }
 
         function escapeHtml(value) {
             return String(value)
@@ -530,36 +1258,113 @@ $db->close();
             return Number(value || 0).toFixed(2);
         }
 
+        // Image mapping for room types
+        const imageMapping = {
+            'Standard': 'Single Standard.jpg',
+            'Standard Double': 'standard double.jpg',
+            'Deluxe': 'deluxe room.jpg',
+            'Suite': 'suite.jpg',
+            'Family Room': 'family room.jpg',
+            'Twin Room': 'twin room.jpg',
+            'Budget Room': 'budget room.jpg',
+            'Connecting Rooms': 'connecting rooms.jpg',
+            'Penthouse': 'penthouse.jpg'
+        };
+
+        function getRoomImage(roomType) {
+            return imageMapping[roomType] || 'Single Standard.jpg';
+        }
+
         function renderAvailableRooms() {
             const roomList = document.getElementById('availableRoomsList');
+            
+            // Filter rooms by selected type if any
+            let filteredRooms = availableRooms;
+            if (selectedRoomType) {
+                filteredRooms = availableRooms.filter(room => room.type_name === selectedRoomType);
+            }
 
-            if (!availableRooms.length) {
+            if (!filteredRooms.length) {
                 roomList.innerHTML = `
                     <div class="col-12">
                         <div class="text-center py-5 bg-white rounded shadow-sm">
                             <i class="bi bi-calendar-x" style="font-size: 3rem; color: #ccc;"></i>
                             <h5 class="mt-3">No Available Rooms</h5>
-                            <p class="text-muted mb-0">Please check again later.</p>
+                            <p class="text-muted mb-0">` + (selectedRoomType ? `No ${selectedRoomType} rooms available at this time.` : 'Please check again later.') + `</p>
+                            ` + (selectedRoomType ? `<button class="btn btn-sm btn-outline-primary mt-2" onclick="clearRoomTypeFilter()">View All Rooms</button>` : '') + `
                         </div>
                     </div>
                 `;
                 return;
             }
 
-            roomList.innerHTML = availableRooms.map((room) => `
+            roomList.innerHTML = (selectedRoomType ? `
+                <div class="col-12 mb-3">
+                    <div class="alert alert-info alert-dismissible fade show" role="alert">
+                        <i class="bi bi-funnel me-2"></i>
+                        Showing <strong>${filteredRooms.length}</strong> ${selectedRoomType} room${filteredRooms.length !== 1 ? 's' : ''}
+                        <button type="button" class="btn-close" onclick="clearRoomTypeFilter()" data-bs-dismiss="alert"></button>
+                    </div>
+                </div>
+            ` : '') + filteredRooms.map((room) => `
                 <div class="col-md-6 col-lg-4 mb-3">
                     <div class="room-card">
-                        <div class="room-image">
-                            <i class="bi bi-door-closed"></i>
+                        <div class="room-image" style="background-image: url('../images/${getRoomImage(room.type_name)}'); background-size: cover; background-position: center;">
+                            <div class="room-image-overlay"></div>
                         </div>
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div>
                                 <h5 class="mb-1">Room ${escapeHtml(room.room_number)}</h5>
-                                <small class="text-muted">Floor ${escapeHtml(room.floor_number)}</small>
+                                <small class="text-muted">Room ID: #${Number(room.room_id)}</small>
                             </div>
                             <span class="price-tag">₱${formatMoney(room.base_price)}/night</span>
                         </div>
-                        <button class="btn btn-primary w-100"
+                        <div class="mb-2">
+                            <span class="badge bg-info text-dark">${escapeHtml(room.type_name)}</span>
+                            <span class="badge bg-success">Available</span>
+                        </div>
+
+                        <div class="room-details">
+                            <div class="room-detail-item">
+                                <div class="room-detail-icon occupancy">
+                                    <i class="bi bi-people"></i>
+                                </div>
+                                <div class="room-detail-text">
+                                    <span class="room-detail-label">Capacity</span>
+                                    <span class="room-detail-value">Max ${Number(room.max_occupancy)} guests</span>
+                                </div>
+                            </div>
+                            <div class="room-detail-item">
+                                <div class="room-detail-icon floor">
+                                    <i class="bi bi-building"></i>
+                                </div>
+                                <div class="room-detail-text">
+                                    <span class="room-detail-label">Location</span>
+                                    <span class="room-detail-value">Floor ${Number(room.floor_number)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        ${room.description ? `
+                            <div class="room-description">
+                                <i class="bi bi-info-circle me-1"></i>
+                                ${escapeHtml(room.description)}
+                            </div>
+                        ` : ''}
+
+                        <div class="room-amenities">
+                            <span class="amenity-badge">
+                                <i class="bi bi-wifi"></i> WiFi
+                            </span>
+                            <span class="amenity-badge">
+                                <i class="bi bi-thermometer-half"></i> AC
+                            </span>
+                            <span class="amenity-badge">
+                                <i class="bi bi-tv"></i> TV
+                            </span>
+                        </div>
+                        
+                        <button class="btn btn-primary w-100 mt-3"
                                 onclick="bookRoom(${Number(room.room_id)}, '${escapeHtml(room.room_number)}', ${Number(room.base_price)})">
                             <i class="bi bi-calendar-plus me-2"></i>Book Now
                         </button>

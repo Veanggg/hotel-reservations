@@ -162,6 +162,19 @@ $reservationsQuery = "
 ";
 $reservationsResult = $db->query($reservationsQuery);
 
+// Image mapping for room types
+$imageMapping = [
+    'Standard' => 'Single Standard.jpg',
+    'Standard Double' => 'standard double.jpg',
+    'Deluxe' => 'deluxe room.jpg',
+    'Suite' => 'suite.jpg',
+    'Family Room' => 'family room.jpg',
+    'Twin Room' => 'twin room.jpg',
+    'Budget Room' => 'budget room.jpg',
+    'Connecting Rooms' => 'connecting rooms.jpg',
+    'Penthouse' => 'penthouse.jpg'
+];
+
 $db->close();
 ?>
 
@@ -236,6 +249,25 @@ $db->close();
             font-size: 1.5rem;
             font-weight: bold;
             color: #28a745;
+        }
+        .room-image-display {
+            width: 100%;
+            height: 180px;
+            border-radius: 12px;
+            background-size: cover;
+            background-position: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        .room-image-display::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
         }
     </style>
 </head>
@@ -313,68 +345,67 @@ $db->close();
                          data-res-amount="<?php echo $reservation['total_amount']; ?>"
                          data-res-status="<?php echo $reservation['status']; ?>">
                         <div class="row align-items-center">
-                            <div class="col-md-8">
-                                <div class="d-flex align-items-start">
-                                    <div class="room-icon me-3">
-                                        <i class="bi bi-door-closed"></i>
+                            <div class="col-md-4">
+                                <div class="room-image-display" style="background-image: url('../images/<?php echo htmlspecialchars($imageMapping[$reservation['type_name']] ?? 'Single Standard.jpg'); ?>');"></div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="d-flex flex-column">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <div>
+                                            <h5 class="mb-1">Reservation #<?php echo $reservation['reservation_id']; ?></h5>
+                                            <p class="text-muted mb-0">
+                                                Room <?php echo $reservation['room_number']; ?> - <?php echo $reservation['type_name']; ?>
+                                            </p>
+                                        </div>
+                                        <span class="status-badge status-<?php echo $reservation['status']; ?>">
+                                            <?php echo ucfirst(str_replace('_', ' ', $reservation['status'])); ?>
+                                        </span>
                                     </div>
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex justify-content-between align-items-start mb-2">
-                                            <div>
-                                                <h5 class="mb-1">Reservation #<?php echo $reservation['reservation_id']; ?></h5>
-                                                <p class="text-muted mb-0">
-                                                    Room <?php echo $reservation['room_number']; ?> - <?php echo $reservation['type_name']; ?>
-                                                </p>
-                                            </div>
-                                            <span class="status-badge status-<?php echo $reservation['status']; ?>">
-                                                <?php echo ucfirst(str_replace('_', ' ', $reservation['status'])); ?>
-                                            </span>
-                                        </div>
-                                        
-                                        <div class="row mb-3">
-                                            <div class="col-md-6">
-                                                <p class="mb-1"><strong>Check-in:</strong> <?php echo date('M d, Y g:i A', strtotime($reservation['check_in_date'] . ' ' . $reservation['check_in_time'])); ?></p>
-                                                <p class="mb-1"><strong>Check-out:</strong> <?php echo date('M d, Y g:i A', strtotime($reservation['check_out_date'] . ' ' . $reservation['check_out_time'])); ?></p>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <p class="mb-1"><strong>Duration:</strong> <?php echo max(1, $reservation['duration_hours']); ?> hour<?php echo $reservation['duration_hours'] != 1 ? 's' : ''; ?></p>
-                                                <p class="mb-1"><strong>Guest:</strong> <?php echo $reservation['guest_name']; ?></p>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="d-flex gap-2">
-                                            <button class="btn btn-sm btn-outline-primary" onclick="viewDetails(<?php echo $reservation['reservation_id']; ?>)">
-                                                <i class="bi bi-eye me-1"></i> View Details
-                                            </button>
-                                            
-                                            <?php if (in_array($reservation['status'], ['confirmed', 'checked_in'])): ?>
-                                            <button class="btn btn-sm btn-outline-secondary" onclick="openExtendModal(<?php echo $reservation['reservation_id']; ?>)">
-                                                <i class="bi bi-arrow-clockwise me-1"></i> Extend
-                                            </button>
-                                            <?php endif; ?>
-
-                                            <?php if ($reservation['status'] == 'confirmed'): ?>
-                                            <button class="btn btn-sm btn-outline-warning" onclick="cancelBooking(<?php echo $reservation['reservation_id']; ?>)">
-                                                <i class="bi bi-x-circle me-1"></i> Cancel
-                                            </button>
-                                            <?php endif; ?>
-                                            
-                                            <button class="btn btn-sm btn-outline-primary" onclick="printReceipt(<?php echo $reservation['reservation_id']; ?>)">
-                                                <i class="bi bi-printer me-1"></i> Print
-                                            </button>
-
-                                            <button class="btn btn-sm btn-outline-success" onclick="downloadReceipt(<?php echo $reservation['reservation_id']; ?>)">
-                                                <i class="bi bi-download me-1"></i> Download
-                                            </button>
-                                        </div>
+                                    
+                                    <div class="mb-3">
+                                        <p class="mb-1"><strong>Check-in:</strong> <?php echo date('M d, Y g:i A', strtotime($reservation['check_in_date'] . ' ' . $reservation['check_in_time'])); ?></p>
+                                        <p class="mb-1"><strong>Check-out:</strong> <?php echo date('M d, Y g:i A', strtotime($reservation['check_out_date'] . ' ' . $reservation['check_out_time'])); ?></p>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <p class="mb-1"><strong>Duration:</strong> <?php echo max(1, $reservation['duration_hours']); ?> hour<?php echo $reservation['duration_hours'] != 1 ? 's' : ''; ?></p>
+                                        <p class="mb-1"><strong>Guest:</strong> <?php echo $reservation['guest_name']; ?></p>
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-4 text-end">
-                                <div class="price-display">
-                                    ₱<?php echo number_format($reservation['total_amount'], 2); ?>
+                            <div class="col-md-4">
+                                <div class="d-flex flex-column align-items-end">
+                                    <div class="price-display mb-3">
+                                        ₱<?php echo number_format($reservation['total_amount'], 2); ?>
+                                    </div>
+                                    <small class="text-muted mb-3">Total Amount</small>
+                                    
+                                    <div class="d-flex gap-2 flex-wrap justify-content-end">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="viewDetails(<?php echo $reservation['reservation_id']; ?>)">
+                                            <i class="bi bi-eye me-1"></i> View Details
+                                        </button>
+                                        
+                                        <?php if (in_array($reservation['status'], ['confirmed', 'checked_in'])): ?>
+                                        <button class="btn btn-sm btn-outline-secondary" onclick="openExtendModal(<?php echo $reservation['reservation_id']; ?>)">
+                                            <i class="bi bi-arrow-clockwise me-1"></i> Extend
+                                        </button>
+                                        <?php endif; ?>
+
+                                        <?php if ($reservation['status'] == 'confirmed'): ?>
+                                        <button class="btn btn-sm btn-outline-warning" onclick="cancelBooking(<?php echo $reservation['reservation_id']; ?>)">
+                                            <i class="bi bi-x-circle me-1"></i> Cancel
+                                        </button>
+                                        <?php endif; ?>
+                                        
+                                        <button class="btn btn-sm btn-outline-primary" onclick="printReceipt(<?php echo $reservation['reservation_id']; ?>)">
+                                            <i class="bi bi-printer me-1"></i> Print
+                                        </button>
+
+                                        <button class="btn btn-sm btn-outline-success" onclick="downloadReceipt(<?php echo $reservation['reservation_id']; ?>)">
+                                            <i class="bi bi-download me-1"></i> Download
+                                        </button>
+                                    </div>
                                 </div>
-                                <small class="text-muted">Total Amount</small>
                             </div>
                         </div>
                     </div>
