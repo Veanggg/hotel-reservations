@@ -138,9 +138,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         
                         <div class="text-center">
                             <small class="text-muted">
-                                Demo Accounts:<br>
-                                <strong>Admin:</strong> admin / 12345678<br>
-                                <strong>User:</strong> john_doe / password123
                             </small>
                         </div>
                     </div>
