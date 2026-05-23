@@ -14,8 +14,11 @@ if (isAdmin()) {
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../functions/availability.php';
 require_once __DIR__ . '/../functions/reservation.php';
+require_once __DIR__ . '/../functions/payment.php';
 
 $db = new Database();
+// Ensure payment table has payment_type column
+ensurePaymentTypeColumn($db);
 syncRoomAvailability($db);
 
 // Get current user info
@@ -54,6 +57,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['a
     $check_in_datetime = combineReservationDateTime($check_in_date, $check_in_time);
     $check_out_datetime = combineReservationDateTime($check_out_date, $check_out_time);
     $base_price = getRoomBasePrice($db, $room_id);
+    
+    // Payment handling
+    $payment_method = isset($_POST['payment_method']) ? $_POST['payment_method'] : 'cash';
+    $is_half_payment = isset($_POST['half_payment']) && $_POST['half_payment'] == '1';
 
     if ($base_price === null) {
         $error = "Please select a valid room from the database.";
@@ -98,11 +105,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['a
                     VALUES ($guest_id, $room_id, '$check_in_date', '$check_out_date', $total_amount, $user_id)";
         }
         $db->query($sql);
+        $reservation_id = $db->getLastInsertId();
+        
+        // Handle payment creation
+        if ($is_half_payment) {
+            $payment_amount = calculateHalfPayment($total_amount);
+            createPayment($db, $reservation_id, $payment_amount, $payment_method, 'half');
+        } else {
+            createPayment($db, $reservation_id, $total_amount, $payment_method, 'full');
+        }
         
         // Update room status
         $db->query("UPDATE rooms SET status = 'reserved' WHERE room_id = $room_id");
         
-        $success = "Room booked successfully!";
+        if ($is_half_payment) {
+            $half_amount = calculateHalfPayment($total_amount);
+            $success = "Room booked successfully! Half payment of ₱" . number_format($half_amount, 2) . " is pending. Remaining balance: ₱" . number_format($total_amount - $half_amount, 2);
+        } else {
+            $success = "Room booked successfully! Total amount due: ₱" . number_format($total_amount, 2);
+        }
     }
 }
 
@@ -561,11 +582,15 @@ $db->close();
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
         }
 
-        .room-type-icon.standard {
+        .room-type-icon.standard-single {
             background: linear-gradient(135deg, #667eea, #764ba2);
         }
 
-        .room-type-icon.deluxe {
+        .room-type-icon.standard-double {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+
+        .room-type-icon.deluxe-room {
             background: linear-gradient(135deg, #f093fb, #f5576c);
         }
 
@@ -573,8 +598,33 @@ $db->close();
             background: linear-gradient(135deg, #4facfe, #00f2fe);
         }
 
+        .room-type-icon.family-room {
+            background: linear-gradient(135deg, #43e97b, #38f9d7);
+        }
+
+        .room-type-icon.executive-suite {
+            background: linear-gradient(135deg, #fa709a, #fee140);
+        }
+
         .room-type-icon.penthouse {
             background: linear-gradient(135deg, #fa709a, #fee140);
+        }
+
+        .room-type-icon.budget-room {
+            background: linear-gradient(135deg, #a8edea, #fed6e3);
+        }
+
+        .room-type-icon.twin-room {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+
+        .room-type-icon.connecting-rooms {
+            background: linear-gradient(135deg, #43e97b, #38f9d7);
+        }
+
+        /* Fallback for any other room types */
+        .room-type-icon {
+            background: linear-gradient(135deg, #667eea, #764ba2);
         }
 
         .room-type-title {
@@ -915,7 +965,22 @@ $db->close();
                         <div class="room-type-card" onclick="filterByRoomType('<?php echo htmlspecialchars($roomType['type_name']); ?>')">
                             <div class="room-type-header">
                                 <div class="room-type-icon <?php echo strtolower(str_replace(' ', '-', $roomType['type_name'])); ?>">
-                                    <i class="bi bi-door-closed"></i>
+                                    <?php 
+                                    $icons = [
+                                        'Standard Single' => 'bi-door-closed',
+                                        'Standard Double' => 'bi-door-closed',
+                                        'Deluxe Room' => 'bi-gem',
+                                        'Suite' => 'bi-star',
+                                        'Family Room' => 'bi-houses',
+                                        'Executive Suite' => 'bi-briefcase',
+                                        'Penthouse' => 'bi-building',
+                                        'Budget Room' => 'bi-wallet-fill',
+                                        'Twin Room' => 'bi-door-closed',
+                                        'Connecting Rooms' => 'bi-bezier'
+                                    ];
+                                    $icon = $icons[$roomType['type_name']] ?? 'bi-door-closed';
+                                    ?>
+                                    <i class="bi <?php echo $icon; ?>"></i>
                                 </div>
                                 <div class="room-type-title">
                                     <h5><?php echo htmlspecialchars($roomType['type_name']); ?></h5>
@@ -1188,6 +1253,68 @@ $db->close();
                                     <div class="mb-3">
                                         <label class="form-label">Total Amount (₱)</label>
                                         <input type="number" step="0.01" class="form-control" name="total_amount" id="total_amount" readonly required>
+                                    </div>
+
+                                    <!-- Payment Options -->
+                                    <div class="card border-primary mb-3">
+                                        <div class="card-header bg-primary text-white">
+                                            <i class="bi bi-credit-card me-2"></i>Payment Information
+                                        </div>
+                                        <div class="card-body">
+                                            <!-- Payment Method Selection -->
+                                            <div class="mb-3">
+                                                <label class="form-label"><strong>Payment Method</strong></label>
+                                                <div class="row">
+                                                    <?php 
+                                                    $paymentMethods = getPaymentMethods();
+                                                    foreach ($paymentMethods as $key => $method): 
+                                                    ?>
+                                                        <div class="col-md-6 mb-2">
+                                                            <div class="form-check">
+                                                                <input class="form-check-input" type="radio" name="payment_method" id="payment_<?php echo $key; ?>" value="<?php echo $key; ?>" <?php echo $key === 'cash' ? 'checked' : ''; ?>>
+                                                                <label class="form-check-label" for="payment_<?php echo $key; ?>">
+                                                                    <?php echo getPaymentMethodIcon($key); ?> <?php echo $method; ?>
+                                                                </label>
+                                                            </div>
+                                                        </div>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                            </div>
+
+                                            <!-- Half Payment Option -->
+                                            <div class="mb-3">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" name="half_payment" id="half_payment" value="1">
+                                                    <label class="form-check-label" for="half_payment">
+                                                        <strong>Pay Half Now, Half on Arrival</strong>
+                                                    </label>
+                                                </div>
+                                                <small class="text-muted d-block mt-2">
+                                                    <i class="bi bi-info-circle"></i> 
+                                                    When enabled, you only pay half of the total amount now. The remaining balance will be due upon check-in.
+                                                </small>
+                                            </div>
+
+                                            <!-- Payment Summary -->
+                                            <div class="alert alert-info mb-0">
+                                                <div class="row">
+                                                    <div class="col-md-6">
+                                                        <small><strong>Full Amount:</strong></small><br>
+                                                        <strong id="full_amount_display">₱0.00</strong>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <small id="payment_label"><strong>Pay Now:</strong></small><br>
+                                                        <strong id="pay_now_display">₱0.00</strong>
+                                                    </div>
+                                                </div>
+                                                <div class="row mt-2" id="remaining_row" style="display: none;">
+                                                    <div class="col-md-6">
+                                                        <small><strong>Balance Due:</strong></small><br>
+                                                        <strong id="remaining_display">₱0.00</strong>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                     
                                     <div class="alert alert-info">
@@ -1483,13 +1610,42 @@ $db->close();
                         const hours = Math.max(1, Math.ceil((endDate - startDate) / (1000 * 60 * 60)));
                         const total = (basePrice / 24) * hours;
                         document.getElementById('total_amount').value = total.toFixed(2);
+                        updatePaymentDisplay(total);
                     } else {
                         document.getElementById('total_amount').value = '';
+                        updatePaymentDisplay(0);
                     }
                 } else {
                     checkout.setCustomValidity('Check-out must be after check-in.');
                     document.getElementById('total_amount').value = '';
+                    updatePaymentDisplay(0);
                 }
+            }
+        }
+
+        function updatePaymentDisplay(totalAmount) {
+            const fullAmount = parseFloat(totalAmount) || 0;
+            const isHalfPayment = document.getElementById('half_payment').checked;
+            const halfAmount = fullAmount / 2;
+            
+            // Update full amount display
+            document.getElementById('full_amount_display').textContent = '₱' + fullAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            
+            // Update pay now display
+            const payNowAmount = isHalfPayment ? halfAmount : fullAmount;
+            document.getElementById('pay_now_display').textContent = '₱' + payNowAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            
+            // Update remaining balance display
+            const remainingRow = document.getElementById('remaining_row');
+            const paymentLabel = document.getElementById('payment_label');
+            
+            if (isHalfPayment) {
+                remainingRow.style.display = 'block';
+                document.getElementById('remaining_display').textContent = '₱' + halfAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                paymentLabel.innerHTML = '<strong>Pay Now (Half):</strong>';
+            } else {
+                remainingRow.style.display = 'none';
+                paymentLabel.innerHTML = '<strong>Pay Now (Full):</strong>';
             }
         }
 
@@ -1523,6 +1679,19 @@ $db->close();
             checkout.setCustomValidity(conflict ? 'This room is already booked for the selected range.' : '');
             return !conflict;
         }
+        
+        // Event listeners for payment options
+        document.getElementById('half_payment').addEventListener('change', function() {
+            const totalAmount = parseFloat(document.getElementById('total_amount').value) || 0;
+            updatePaymentDisplay(totalAmount);
+        });
+
+        // Add change listener to all payment method radio buttons (optional for future use)
+        document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                console.log('Selected payment method:', this.value);
+            });
+        });
         
         // Set today as minimum date for check-in
         const today = currentCheckInDate;

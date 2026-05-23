@@ -14,8 +14,11 @@ if (isAdmin()) {
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../functions/availability.php';
 require_once __DIR__ . '/../functions/reservation.php';
+require_once __DIR__ . '/../functions/payment.php';
 
 $db = new Database();
+// Ensure payment table has payment_type column
+ensurePaymentTypeColumn($db);
 syncRoomAvailability($db);
 $user_id = $_SESSION['user_id'];
 $success = null;
@@ -162,6 +165,30 @@ $reservationsQuery = "
 ";
 $reservationsResult = $db->query($reservationsQuery);
 
+// Fetch all reservations and add payment information
+$reservationsWithPayments = [];
+if ($reservationsResult && $reservationsResult->num_rows > 0) {
+    while ($reservation = $reservationsResult->fetch_assoc()) {
+        $paymentSummary = getPaymentSummary($db, $reservation['reservation_id']);
+        $reservation['payment_summary'] = $paymentSummary;
+        
+        // Get latest payment method from payments table
+        $paymentQuery = "SELECT payment_method, payment_type FROM payments 
+                        WHERE reservation_id = " . (int)$reservation['reservation_id'] . " 
+                        ORDER BY payment_date DESC LIMIT 1";
+        $paymentResult = $db->query($paymentQuery);
+        if ($paymentResult && $paymentRow = $paymentResult->fetch_assoc()) {
+            $reservation['payment_method'] = $paymentRow['payment_method'] ?? 'cash';
+            $reservation['payment_type'] = $paymentRow['payment_type'] ?? 'full';
+        } else {
+            $reservation['payment_method'] = 'cash';
+            $reservation['payment_type'] = 'full';
+        }
+        
+        $reservationsWithPayments[] = $reservation;
+    }
+}
+
 // Image mapping for room types
 $imageMapping = [
     'Standard' => 'Single Standard.jpg',
@@ -174,8 +201,6 @@ $imageMapping = [
     'Connecting Rooms' => 'connecting rooms.jpg',
     'Penthouse' => 'penthouse.jpg'
 ];
-
-$db->close();
 ?>
 
 <!DOCTYPE html>
@@ -329,8 +354,8 @@ $db->close();
                     </div>
                 <?php endif; ?>
 
-                <?php if ($reservationsResult->num_rows > 0): ?>
-                    <?php while ($reservation = $reservationsResult->fetch_assoc()): ?>
+                <?php if (!empty($reservationsWithPayments)): ?>
+                    <?php foreach ($reservationsWithPayments as $reservation): ?>
                     <div class="booking-card"
                          data-res-id="<?php echo $reservation['reservation_id']; ?>"
                          data-res-checkin="<?php echo $reservation['check_in_datetime']; ?>"
@@ -343,7 +368,12 @@ $db->close();
                          data-res-roomtype="<?php echo $reservation['type_name']; ?>"
                          data-res-baseprice="<?php echo $reservation['base_price']; ?>"
                          data-res-amount="<?php echo $reservation['total_amount']; ?>"
-                         data-res-status="<?php echo $reservation['status']; ?>">
+                         data-res-status="<?php echo $reservation['status']; ?>"
+                         data-payment-method="<?php echo $reservation['payment_method']; ?>"
+                         data-payment-type="<?php echo $reservation['payment_type']; ?>"
+                         data-paid-amount="<?php echo $reservation['payment_summary']['paid_amount']; ?>"
+                         data-remaining-amount="<?php echo $reservation['payment_summary']['remaining_amount']; ?>"
+                         data-payment-status="<?php echo $reservation['payment_summary']['payment_status']; ?>">
                         <div class="row align-items-center">
                             <div class="col-md-4">
                                 <div class="room-image-display" style="background-image: url('../images/<?php echo htmlspecialchars($imageMapping[$reservation['type_name']] ?? 'Single Standard.jpg'); ?>');"></div>
@@ -409,7 +439,7 @@ $db->close();
                             </div>
                         </div>
                     </div>
-                    <?php endwhile; ?>
+                    <?php endforeach; ?>
                 <?php else: ?>
                     <div class="card border-0 shadow-sm">
                         <div class="card-body text-center py-5">
@@ -497,6 +527,34 @@ $db->close();
                             <p id="detailTotalAmount" class="fw-bold" style="font-size: 1.3rem; color: #28a745;"></p>
                         </div>
                     </div>
+                    <hr>
+                    <h6 class="text-muted mb-3">PAYMENT INFORMATION</h6>
+                    <div id="paymentInfo">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <p class="text-muted mb-1">Payment Method</p>
+                                <p id="detailPaymentMethod" class="fw-bold"></p>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="text-muted mb-1">Payment Type</p>
+                                <p id="detailPaymentType" class="fw-bold"></p>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <p class="text-muted mb-1">Amount Paid</p>
+                                <p id="detailAmountPaid" class="fw-bold"></p>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <p class="text-muted mb-1">Remaining Balance</p>
+                                <p id="detailRemainingBalance" class="fw-bold" style="color: #dc3545;"></p>
+                            </div>
+                        </div>
+                        <div class="alert alert-info mb-0" id="paymentStatusAlert">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <span id="paymentStatusText"></span>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -567,6 +625,38 @@ $db->close();
             document.getElementById('detailGuestPhone').textContent = card.dataset.resPhone;
             document.getElementById('detailBasePrice').textContent = '₱' + parseFloat(card.dataset.resBaseprice).toFixed(2);
             document.getElementById('detailTotalAmount').textContent = '₱' + parseFloat(card.dataset.resAmount).toFixed(2);
+            
+            // Populate payment information
+            const paymentMethodText = card.dataset.paymentMethod.replace('_', ' ').toUpperCase();
+            const paymentTypeDisplay = card.dataset.paymentType === 'half' ? 'Half Payment' : 'Full Payment';
+            const paidAmount = parseFloat(card.dataset.paidAmount) || 0;
+            const remainingAmount = parseFloat(card.dataset.remainingAmount) || 0;
+            const paymentStatus = card.dataset.paymentStatus;
+            
+            document.getElementById('detailPaymentMethod').textContent = paymentMethodText;
+            document.getElementById('detailPaymentType').textContent = paymentTypeDisplay;
+            document.getElementById('detailAmountPaid').textContent = '₱' + paidAmount.toFixed(2);
+            document.getElementById('detailRemainingBalance').textContent = '₱' + remainingAmount.toFixed(2);
+            
+            // Update payment status alert
+            const paymentStatusAlert = document.getElementById('paymentStatusAlert');
+            const paymentStatusText = document.getElementById('paymentStatusText');
+            let statusMessage = '';
+            let alertClass = 'alert-info';
+            
+            if (paymentStatus === 'fully_paid') {
+                statusMessage = '<i class="bi bi-check-circle me-2"></i>Payment Completed - All balance paid';
+                alertClass = 'alert-success';
+            } else if (paymentStatus === 'partially_paid') {
+                statusMessage = `<i class="bi bi-exclamation-circle me-2"></i>Partial Payment - ₱${remainingAmount.toFixed(2)} balance pending`;
+                alertClass = 'alert-warning';
+            } else {
+                statusMessage = '<i class="bi bi-clock me-2"></i>Payment Pending - Please settle payment before check-in';
+                alertClass = 'alert-danger';
+            }
+            
+            paymentStatusAlert.className = 'alert mb-0 ' + alertClass;
+            paymentStatusText.innerHTML = statusMessage;
             
             // Open the modal
             const modal = new bootstrap.Modal(document.getElementById('detailsModal'));
