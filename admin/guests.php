@@ -427,7 +427,7 @@ $db->close();
                                     <div class="mb-3">
                                         <label class="form-label">Phone</label>
                                         <input type="tel" class="form-control" name="phone" required
-                                               inputmode="numeric" pattern="[0-9]+" maxlength="20"
+                                               inputmode="numeric" pattern="[0-9]+" maxlength="12"
                                                title="Phone number must contain numbers only"
                                                value="<?php echo $editGuest['phone'] ?? ''; ?>">
                                     </div>

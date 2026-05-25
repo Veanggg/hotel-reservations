@@ -290,7 +290,7 @@ $db->close();
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Phone</label>
                                 <input type="tel" class="form-control" name="phone"
-                                       inputmode="numeric" pattern="[0-9]+" maxlength="20"
+                                       inputmode="numeric" pattern="[0-9]+" maxlength="12"
                                        title="Phone number must contain numbers only"
                                        value="<?php echo $user['phone']; ?>">
                             </div>
