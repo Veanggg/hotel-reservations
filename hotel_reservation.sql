@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: May 25, 2026 at 02:02 PM
+-- Generation Time: May 25, 2026 at 03:33 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -50,7 +50,9 @@ INSERT INTO `guests` (`guest_id`, `first_name`, `last_name`, `email`, `phone`, `
 (5, 'Vea', 'Laparan', 'veang@gmail.com', '09367928148', 'Prenza', '566777', '2026-05-23 14:45:45'),
 (6, 'Christine', 'Colecha', 'tin@gmail.com', '0987674857', NULL, NULL, '2026-05-23 15:09:04'),
 (7, 'Kelly', 'Delas Alas', 'kelly@gmail.com', '09876574356', 'Brgy. Quatro', '34567', '2026-05-24 05:37:00'),
-(8, 'Marc', 'Mercado', 'marc@gmail.com', '0956897345', 'Luyahan', '8765', '2026-05-24 05:38:42');
+(8, 'Marc', 'Mercado', 'marc@gmail.com', '0956897345', 'Luyahan', '8765', '2026-05-24 05:38:42'),
+(9, 'Ezra', 'Mendoza', 'ezra@example.com', '9876543210', NULL, NULL, '2026-05-25 12:29:50'),
+(10, 'Ric', 'Badlis', 'rriz@gmail.com', '0987657967', NULL, NULL, '2026-05-25 12:33:37');
 
 -- --------------------------------------------------------
 
@@ -99,7 +101,13 @@ INSERT INTO `payments` (`payment_id`, `reservation_id`, `amount`, `payment_metho
 (1, 1, 6600.00, 'credit_card', 'full', '2026-05-22 09:12:41', 'completed'),
 (3, 3, 4400.00, 'cash', 'full', '2026-05-22 09:12:41', 'completed'),
 (5, 5, 400.00, 'cash', 'remaining', '2026-05-23 17:11:03', 'completed'),
-(9, 7, 3300.00, 'cash', 'remaining', '2026-05-24 05:30:34', 'completed');
+(9, 7, 3300.00, 'cash', 'remaining', '2026-05-24 05:30:34', 'completed'),
+(10, 14, 1466.67, 'cash', 'remaining', '2026-05-25 12:18:16', 'completed'),
+(11, 15, 1466.67, '', 'remaining', '2026-05-25 12:19:02', 'completed'),
+(12, 16, 1166.67, 'credit_card', 'half', '2026-05-25 12:21:17', 'completed'),
+(13, 16, 1166.66, 'credit_card', 'remaining', '2026-05-25 12:22:15', 'completed'),
+(14, 17, 20000.00, '', 'full', '2026-05-25 12:29:50', 'completed'),
+(15, 18, 56000.00, 'credit_card', 'full', '2026-05-25 12:33:37', 'completed');
 
 -- --------------------------------------------------------
 
@@ -129,7 +137,12 @@ INSERT INTO `reservations` (`reservation_id`, `guest_id`, `room_id`, `check_in_d
 (1, 1, 3, '2024-01-15', '17:12:41', '2024-01-18', '12:00:00', 6600.00, 'checked_out', 1, '2026-05-22 09:12:41'),
 (3, 3, 4, '2024-02-01', '17:12:41', '2024-02-03', '12:00:00', 4400.00, 'checked_out', 2, '2026-05-22 09:12:41'),
 (5, 5, 1, '2026-05-23', '22:45:00', '2026-05-24', '06:00:00', 400.00, 'checked_out', 4, '2026-05-23 14:45:45'),
-(7, 5, 2, '2026-05-24', '00:23:00', '2026-05-26', '18:00:00', 3300.00, 'checked_in', 4, '2026-05-23 16:23:35');
+(7, 5, 2, '2026-05-24', '00:23:00', '2026-05-26', '18:00:00', 3300.00, 'checked_in', 4, '2026-05-23 16:23:35'),
+(14, 6, 6, '2026-05-25', '20:17:00', '2026-05-26', '12:00:00', 1466.67, 'checked_in', 1, '2026-05-25 12:18:07'),
+(15, 1, 3, '2026-05-25', '20:18:00', '2026-05-26', '12:00:00', 1466.67, 'checked_in', 1, '2026-05-25 12:18:57'),
+(16, 6, 8, '2026-05-25', '20:20:00', '2026-05-26', '12:00:00', 2333.33, 'checked_in', 3, '2026-05-25 12:21:17'),
+(17, 9, 16, '2026-05-25', '20:26:00', '2026-05-27', '12:00:00', 20000.00, 'checked_in', 2, '2026-05-25 12:29:50'),
+(18, 10, 19, '2026-05-25', '20:32:00', '2026-05-30', '12:00:00', 56000.00, 'checked_in', 5, '2026-05-25 12:33:37');
 
 -- --------------------------------------------------------
 
@@ -186,12 +199,12 @@ CREATE TABLE `rooms` (
 INSERT INTO `rooms` (`room_id`, `room_number`, `type_id`, `floor_number`, `status`) VALUES
 (1, '101', 1, 1, 'available'),
 (2, '102', 1, 1, 'occupied'),
-(3, '103', 2, 1, 'available'),
+(3, '103', 2, 1, 'occupied'),
 (4, '104', 2, 1, 'available'),
 (5, '105', 8, 1, 'maintenance'),
-(6, '201', 2, 2, 'available'),
+(6, '201', 2, 2, 'occupied'),
 (7, '202', 3, 2, 'available'),
-(8, '203', 3, 2, 'available'),
+(8, '203', 3, 2, 'occupied'),
 (9, '204', 9, 2, 'available'),
 (10, '205', 3, 2, 'available'),
 (11, '301', 4, 3, 'available'),
@@ -199,8 +212,9 @@ INSERT INTO `rooms` (`room_id`, `room_number`, `type_id`, `floor_number`, `statu
 (13, '303', 4, 3, 'available'),
 (14, '304', 5, 3, 'available'),
 (15, '401', 6, 4, 'available'),
-(16, '402', 7, 4, 'available'),
-(17, '403', 10, 4, 'available');
+(16, '402', 7, 4, 'occupied'),
+(17, '403', 10, 4, 'available'),
+(19, '11', 7, 20, 'occupied');
 
 -- --------------------------------------------------------
 
@@ -294,9 +308,10 @@ CREATE TABLE `users` (
 
 INSERT INTO `users` (`user_id`, `username`, `password`, `full_name`, `email`, `phone`, `role`, `created_at`) VALUES
 (1, 'admin', '12345678', 'System Administrator', 'admin@hotel.com', '1234567890', 'admin', '2026-05-22 09:12:41'),
-(2, 'ezra', 'sabina', 'Ezra Mendoza', 'ezra@example.com', '9876543210', 'user', '2026-05-22 09:12:41'),
+(2, 'ezra', '12345', 'Ezra Mendoza', 'ezra@example.com', '9876543210', 'user', '2026-05-22 09:12:41'),
 (3, 'tin', '12345', 'Christine Colecha', 'tin@gmail.com', '0987674857', 'user', '2026-05-22 09:12:41'),
-(4, 'veang', 'veang', 'vea laparan', 'veang@gmail.com', '09367928148', 'user', '2026-05-23 14:36:01');
+(4, 'veang', 'veang', 'vea laparan', 'veang@gmail.com', '09367928148', 'user', '2026-05-23 14:36:01'),
+(5, 'ric', '12345', 'Ric Badlis', 'rriz@gmail.com', '0987657967', 'user', '2026-05-25 12:31:25');
 
 -- --------------------------------------------------------
 
@@ -400,7 +415,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `guests`
 --
 ALTER TABLE `guests`
-  MODIFY `guest_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+  MODIFY `guest_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
 -- AUTO_INCREMENT for table `guest_services`
@@ -412,19 +427,19 @@ ALTER TABLE `guest_services`
 -- AUTO_INCREMENT for table `payments`
 --
 ALTER TABLE `payments`
-  MODIFY `payment_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `payment_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
 
 --
 -- AUTO_INCREMENT for table `reservations`
 --
 ALTER TABLE `reservations`
-  MODIFY `reservation_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `reservation_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 
 --
 -- AUTO_INCREMENT for table `rooms`
 --
 ALTER TABLE `rooms`
-  MODIFY `room_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
+  MODIFY `room_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
 
 --
 -- AUTO_INCREMENT for table `room_types`
@@ -442,7 +457,7 @@ ALTER TABLE `services`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- Constraints for dumped tables
